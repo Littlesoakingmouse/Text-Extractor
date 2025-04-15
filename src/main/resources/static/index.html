@@ -1,0 +1,235 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Image Text Extractor</title>
+    <style>
+        body { font-family: Arial; margin: 20px; }
+        .container { max-width: 600px; margin: 0 auto; }
+        .result { margin-top: 20px; padding: 10px; border: 1px solid #ccc; }
+        
+        .button-group {
+            display: flex;
+            gap: 10px;
+            margin-top: 20px;
+            justify-content: center;
+        }
+
+        .step {
+            margin-bottom: 30px;
+            padding: 20px;
+            border: 1px solid #ddd;
+            border-radius: 8px;
+            background-color: white;
+        }
+
+        .step h2 {
+            color: var(--primary-color);
+            margin-bottom: 15px;
+        }
+
+        .disabled {
+            opacity: 0.5;
+            pointer-events: none;
+        }
+
+        .success {
+            color: #4CAF50;
+            margin-top: 10px;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>Image Text Extractor</h1>
+        
+        <!-- Step 1: Upload and Process Image -->
+        <div class="step" id="step1">
+            <h2>Step 1: Upload and Process Image</h2>
+            <div class="upload-container" id="dropZone">
+                <input type="file" id="fileInput" accept="image/*" hidden>
+                <div class="upload-content">
+                    <p>Drag and drop an image or click to upload</p>
+                    <button class="button" id="uploadBtn">Choose File</button>
+                </div>
+            </div>
+            <div class="button-group">
+                <button class="button" id="processBtn" disabled>Process Image</button>
+            </div>
+            <div class="image-preview" id="originalPreview" style="display: none;">
+                <h3>Original Image</h3>
+                <img id="originalImage" alt="Original Image">
+            </div>
+        </div>
+
+        <!-- Step 2: View Processed Image -->
+        <div class="step" id="step2">
+            <h2>Step 2: View Processed Image</h2>
+            <div class="image-preview" id="processedPreview" style="display: none;">
+                <h3>Processed Image</h3>
+                <img id="processedImage" alt="Processed Image">
+            </div>
+            <div class="button-group">
+                <button class="button" id="extractBtn" disabled>Extract Text</button>
+            </div>
+        </div>
+
+        <!-- Step 3: View Extracted Text -->
+        <div class="step" id="step3">
+            <h2>Step 3: View Extracted Text</h2>
+            <div class="text-result" style="display: none;">
+                <textarea id="extractedText" readonly></textarea>
+                <div class="button-group">
+                    <button class="button" id="copyText">Copy Text</button>
+                    <button class="button" id="downloadText">Download Text</button>
+                </div>
+            </div>
+        </div>
+
+        <div class="loading" id="loading">
+            <div class="spinner"></div>
+            <p>Processing...</p>
+        </div>
+    </div>
+
+    <script>
+        document.addEventListener('DOMContentLoaded', function() {
+            const elements = {
+                dropZone: document.getElementById('dropZone'),
+                fileInput: document.getElementById('fileInput'),
+                uploadBtn: document.getElementById('uploadBtn'),
+                processBtn: document.getElementById('processBtn'),
+                extractBtn: document.getElementById('extractBtn'),
+                loading: document.getElementById('loading'),
+                originalImage: document.getElementById('originalImage'),
+                processedImage: document.getElementById('processedImage'),
+                extractedText: document.getElementById('extractedText'),
+                originalPreview: document.getElementById('originalPreview'),
+                processedPreview: document.getElementById('processedPreview'),
+                textResult: document.querySelector('.text-result'),
+                copyText: document.getElementById('copyText'),
+                downloadText: document.getElementById('downloadText')
+            };
+
+            let currentFile = null;
+
+            // Handle drag and drop
+            elements.dropZone.addEventListener('dragover', (e) => {
+                e.preventDefault();
+                elements.dropZone.classList.add('dragover');
+            });
+
+            elements.dropZone.addEventListener('dragleave', () => {
+                elements.dropZone.classList.remove('dragover');
+            });
+
+            elements.dropZone.addEventListener('drop', (e) => {
+                e.preventDefault();
+                elements.dropZone.classList.remove('dragover');
+                handleFileSelection(e.dataTransfer.files[0]);
+            });
+
+            // Handle file input
+            elements.uploadBtn.addEventListener('click', () => {
+                elements.fileInput.click();
+            });
+
+            elements.fileInput.addEventListener('change', (e) => {
+                handleFileSelection(e.target.files[0]);
+            });
+
+            function handleFileSelection(file) {
+                if (!file || !file.type.startsWith('image/')) {
+                    alert('Please upload an image file');
+                    return;
+                }
+
+                currentFile = file;
+                elements.processBtn.disabled = false;
+                
+                // Show original image preview
+                const reader = new FileReader();
+                reader.onload = (e) => {
+                    elements.originalImage.src = e.target.result;
+                    elements.originalPreview.style.display = 'block';
+                };
+                reader.readAsDataURL(file);
+            }
+
+            // Process Image
+            elements.processBtn.addEventListener('click', async () => {
+                if (!currentFile) return;
+
+                elements.loading.style.display = 'block';
+                const formData = new FormData();
+                formData.append('file', currentFile);
+
+                try {
+                    const response = await fetch('/api/process', {
+                        method: 'POST',
+                        body: formData
+                    });
+                    const data = await response.json();
+
+                    if (data.error) {
+                        throw new Error(data.error);
+                    }
+
+                    elements.processedImage.src = `data:image/png;base64,${data.processedImage}`;
+                    elements.processedPreview.style.display = 'block';
+                    elements.extractBtn.disabled = false;
+                } catch (error) {
+                    alert('Error processing image: ' + error.message);
+                } finally {
+                    elements.loading.style.display = 'none';
+                }
+            });
+
+            // Extract Text
+            elements.extractBtn.addEventListener('click', async () => {
+                elements.loading.style.display = 'block';
+
+                try {
+                    const response = await fetch('/api/extract', {
+                        method: 'POST'
+                    });
+                    const data = await response.json();
+
+                    if (data.error) {
+                        throw new Error(data.error);
+                    }
+
+                    elements.extractedText.value = data.text;
+                    elements.textResult.style.display = 'block';
+                } catch (error) {
+                    alert('Error extracting text: ' + error.message);
+                } finally {
+                    elements.loading.style.display = 'none';
+                }
+            });
+
+            // Copy text
+            elements.copyText.addEventListener('click', () => {
+                elements.extractedText.select();
+                document.execCommand('copy');
+                alert('Text copied to clipboard!');
+            });
+
+            // Download text
+            elements.downloadText.addEventListener('click', () => {
+                const text = elements.extractedText.value;
+                const blob = new Blob([text], { type: 'text/plain' });
+                const url = window.URL.createObjectURL(blob);
+                const a = document.createElement('a');
+                a.href = url;
+                a.download = 'extracted-text.txt';
+                document.body.appendChild(a);
+                a.click();
+                window.URL.revokeObjectURL(url);
+                document.body.removeChild(a);
+            });
+        });
+    </script>
+</body>
+</html> 
